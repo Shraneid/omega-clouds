@@ -1,6 +1,7 @@
 struct Uniforms {
     view: mat4x4f,
     projection: mat4x4f,
+    cameraPosition: vec4f,
     deltaTime: f32,
     elapsedTime: f32
 }

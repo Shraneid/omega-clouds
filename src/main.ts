@@ -194,7 +194,7 @@ const indices = new Uint16Array([
 
 const uniformBuffer = device.createBuffer({
     label: "Uniform Buffer",
-    size: 144,
+    size: 160, // 152 + 8 padding, rounded at 16 bytes
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 });
 
@@ -233,6 +233,11 @@ const renderPipelineLayout = device.createPipelineLayout({
 const renderPipeline = device.createRenderPipeline({
     label: "Render Pipeline",
     layout: renderPipelineLayout,
+    primitive: {
+        topology: "triangle-list",
+        cullMode: "back",
+        frontFace: "cw",
+    },
     vertex: {
         module: vertexShader,
         buffers: [
@@ -250,7 +255,23 @@ const renderPipeline = device.createRenderPipeline({
     },
     fragment: {
         module: fragmentShader,
-        targets: [{ format: presentationFormat }],
+        targets: [
+            {
+                format: presentationFormat,
+                blend: {
+                    color: {
+                        srcFactor: "src-alpha",
+                        dstFactor: "one-minus-src-alpha",
+                        operation: "add",
+                    },
+                    alpha: {
+                        srcFactor: "one",
+                        dstFactor: "one-minus-src-alpha",
+                        operation: "add",
+                    },
+                },
+            },
+        ],
     },
 });
 
@@ -271,7 +292,7 @@ const renderPassDescriptor = {
     label: "Render Pass Description",
     colorAttachments: [
         {
-            clearValue: [0.8, 0.8, 0.0, 1.0],
+            clearValue: [114 / 255, 214 / 255, 255 / 255, 1],
             loadOp: "clear",
             storeOp: "store",
             view: context.getCurrentTexture().createView(),
@@ -312,6 +333,11 @@ const render = (deltaTime: number, elapsedTime: number) => {
     device.queue.writeBuffer(
         uniformBuffer,
         128,
+        new Float32Array([...cameraPos, 0]),
+    );
+    device.queue.writeBuffer(
+        uniformBuffer,
+        144,
         new Float32Array([deltaTime / 1000, elapsedTime]),
     );
 
@@ -319,7 +345,6 @@ const render = (deltaTime: number, elapsedTime: number) => {
     // @ts-ignore
     const renderPass = encoder.beginRenderPass(renderPassDescriptor);
     renderPass.setPipeline(renderPipeline);
-    // renderPass.setBindGroup(0, renderBindGroup);
     renderPass.setVertexBuffer(0, vertexBuffer);
     renderPass.setIndexBuffer(indexBuffer, "uint16");
     renderPass.setBindGroup(0, renderBindGroup);
