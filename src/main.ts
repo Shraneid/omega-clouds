@@ -7,6 +7,8 @@ const DISTANCE_TO_CUBE = parseFloat(params.get("distance") ?? "2.2");
 let startTime: number;
 let lastFrameTime: number;
 
+let yaw = 0;
+let pitch = 0.2;
 let mouseDown = false;
 let mousePos = { x: 0, y: 0 };
 let mouseDelta = { x: 0, y: 0 };
@@ -314,11 +316,23 @@ const render = (deltaTime: number, elapsedTime: number) => {
     // MVP Matrices setup
     const aspect = canvas.width / canvas.height;
 
-    const angle = elapsedTime / 1000;
+    // ORBITING CAMERA
+    // const angle = elapsedTime / 1000;
+    // const cameraPos: [number, number, number] = [
+    //     Math.sin(angle) * DISTANCE_TO_CUBE,
+    //     0.5,
+    //     Math.cos(angle) * DISTANCE_TO_CUBE,
+    // ];
+
+    // CAMERA MOVED WITH MOUSE
+    yaw -= mouseDelta.x * 2;
+    pitch -= mouseDelta.y * 2;
+    pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, pitch)); // clamp pitch
+    mouseDelta = { x: 0, y: 0 };
     const cameraPos: [number, number, number] = [
-        Math.sin(angle) * DISTANCE_TO_CUBE,
-        0.5,
-        Math.cos(angle) * DISTANCE_TO_CUBE,
+        Math.sin(yaw) * Math.cos(pitch) * DISTANCE_TO_CUBE,
+        Math.sin(pitch) * DISTANCE_TO_CUBE,
+        Math.cos(yaw) * Math.cos(pitch) * DISTANCE_TO_CUBE,
     ];
 
     // MVP Matrices
