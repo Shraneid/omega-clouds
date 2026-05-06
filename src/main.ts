@@ -2,9 +2,7 @@ import "./style.css";
 import { mat4LookAt, mat4Perspective } from "./helper.ts";
 
 const params = new URLSearchParams(window.location.search);
-const DISTANCE_TO_CLOUD = parseFloat(params.get("distance") ?? "2.5");
-const VORTEX_RADIUS_MULTIPLIER = parseFloat(params.get("radius") ?? "0.06");
-const VORTEX_STRENGTH = parseFloat(params.get("strength") ?? "0.18");
+const DISTANCE_TO_CUBE = parseFloat(params.get("distance") ?? "2.2");
 
 let startTime: number;
 let lastFrameTime: number;
@@ -318,9 +316,9 @@ const render = (deltaTime: number, elapsedTime: number) => {
 
     const angle = elapsedTime / 1000;
     const cameraPos: [number, number, number] = [
-        Math.sin(angle) * DISTANCE_TO_CLOUD,
+        Math.sin(angle) * DISTANCE_TO_CUBE,
         0.5,
-        Math.cos(angle) * DISTANCE_TO_CLOUD,
+        Math.cos(angle) * DISTANCE_TO_CUBE,
     ];
 
     // MVP Matrices
