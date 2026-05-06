@@ -346,7 +346,7 @@ const render = (deltaTime: number, elapsedTime: number) => {
     renderPass.setVertexBuffer(0, vertexBuffer);
     renderPass.setIndexBuffer(indexBuffer, "uint16");
     renderPass.setBindGroup(0, renderBindGroup);
-    renderPass.drawIndexed(32);
+    renderPass.drawIndexed(36);
     renderPass.end();
 
     device.queue.submit([encoder.finish()]);
