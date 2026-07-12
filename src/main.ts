@@ -108,9 +108,45 @@ context.configure({
 });
 // END MAIN SETUP FOR RENDERING
 
+// LOAD TEXTURES
+const loadTextureToBitmap = async (path: string) => {
+    const textureResponse = await fetch(path);
+    const textureBlob = await textureResponse.blob();
+
+    return await createImageBitmap(textureBlob);
+};
+
+const getSamplerAndTexture = async (path: string, label: string) => {
+    const bitmap = await loadTextureToBitmap(path);
+
+    const texture = device.createTexture({
+        label,
+        size: [bitmap.width, bitmap.height, 1],
+        format: "rgba8unorm",
+        usage:
+            GPUTextureUsage.TEXTURE_BINDING |
+            GPUTextureUsage.COPY_DST |
+            GPUTextureUsage.RENDER_ATTACHMENT,
+    });
+
+    device.queue.copyExternalImageToTexture({ source: bitmap }, { texture }, [
+        bitmap.width,
+        bitmap.height,
+    ]);
+
+    const sampler = device.createSampler({
+        minFilter: "linear",
+        magFilter: "linear",
+        addressModeU: "repeat",
+        addressModeV: "repeat",
+    });
+
+    return { sampler, texture };
+};
+
 // LOAD SHADERS
 const loadWGSL = async (path: string) => {
-    const response = await fetch(path);
+    const response = await fetch(path, { cache: "no-store" });
     if (!response.ok) {
         throw new Error(`Failed to load shader: ${path}`);
     }
@@ -211,6 +247,11 @@ const indexBuffer = device.createBuffer({
 });
 // END BUFFERS
 
+// LOAD TEXTURES
+const { sampler: noiseSampler, texture: noiseTexture } =
+    await getSamplerAndTexture("textures/uniformclouds.jpg", "noiseTexture");
+// END LOAD TEXTURES
+
 // BIND GROUP LAYOUTS
 const renderBindGroupLayout = device.createBindGroupLayout({
     label: "Render Bind Group Layout",
@@ -219,6 +260,16 @@ const renderBindGroupLayout = device.createBindGroupLayout({
             binding: 0,
             visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
             buffer: { type: "uniform" },
+        },
+        {
+            binding: 1,
+            visibility: GPUShaderStage.FRAGMENT,
+            sampler: {},
+        },
+        {
+            binding: 2,
+            visibility: GPUShaderStage.FRAGMENT,
+            texture: {},
         },
     ],
 });
@@ -283,6 +334,14 @@ const renderBindGroup = device.createBindGroup({
         {
             binding: 0,
             resource: { buffer: uniformBuffer },
+        },
+        {
+            binding: 1,
+            resource: noiseSampler,
+        },
+        {
+            binding: 2,
+            resource: noiseTexture.createView(),
         },
     ],
 });
@@ -377,6 +436,7 @@ const renderLoop = (timestamp: number) => {
     render(deltaTime, elapsedTime);
 
     lastFrameTime = timestamp;
+    console.log("looping");
     requestAnimationFrame(renderLoop);
 };
 

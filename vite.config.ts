@@ -7,8 +7,8 @@ export default defineConfig({
             name: "watch-shaders",
             configureServer(server) {
                 server.watcher.on("change", (file) => {
-                    console.log(file);
-                    if (file.includes("shaders")) {
+                    console.log(`file changed: ${file}`);
+                    if (file.includes("shaders") || file.endsWith(".ts")) {
                         server.hot.send({ type: "full-reload" });
                     }
                 });
