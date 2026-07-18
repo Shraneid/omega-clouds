@@ -19,6 +19,24 @@ struct VertexOut {
     @location(0) uv: vec2f,
 };
 
+fn rotateXY(p: vec3f, a: f32) -> vec3f {
+    let c = cos(a);
+    let s = sin(a);
+    return vec3f(c * p.x - s * p.y, s * p.x + c * p.y, p.z);
+}
+
+fn rotateYZ(p: vec3f, a: f32) -> vec3f {
+    let c = cos(a);
+    let s = sin(a);
+    return vec3f(p.x, c * p.y - s * p.z, s * p.y + c * p.z);
+}
+
+fn rotateXZ(p: vec3f, a: f32) -> vec3f {
+    let c = cos(a);
+    let s = sin(a);
+    return vec3f(c * p.x - s * p.z, p.y, s * p.x + c * p.z);
+}
+
 fn noise(x: vec3f) -> f32 {
     const offset = vec2(37.0, 239.0);
 
@@ -53,13 +71,65 @@ fn sdSphere(a:vec3f, b: vec3f, radius: f32) -> f32 {
     return length(b-a) - radius;
 };
 
+fn sdTorus(p: vec3f, t: vec2f) -> f32 {
+    let q = vec2(length(p.xz) - t.x, p.y);
+    return length(q) - t.y;
+}
+
+fn sdOctahedron(p: vec3f, s: f32) -> f32 {
+    let p1 = abs(p);
+    return (p1.x+p1.y+p1.z-s) * 0.57735027;
+}
+
+fn sdVerticalCapsule(p: vec3f, h: f32, r: f32) -> f32 {
+  let p1 = p - vec3(0.0, clamp(p.y, 0.0, h), 0.0);
+  return length( p1 ) - r;
+}
+
+fn sdCapsule(p: vec3f, a: vec3f, b: vec3f, r: f32) -> f32 {
+    let pa = p - a;
+    let ba = b - a;
+    let h = clamp( dot(pa,ba)/dot(ba,ba), 0.0, 1.0 );
+    return length( pa - ba*h ) - r;
+}
+
 fn scene(p: vec3f) -> f32 {
     let sphere = vec4f(0.0, 0.0, 0.0, 1.0);
-    let sphereDistance = sdSphere(p, sphere.xyz, sphere.w);
+//    let sphereDistance = sdSphere(p, sphere.xyz, sphere.w);
+    let d1 = sdTorus(p, vec2(1.3, 0.8));
+    let d2 = sdOctahedron(p, 2.0);
+    let d3 = sdVerticalCapsule(p, 2.0, 0.5);
+    let d4 = sdCapsule(p, vec3(0.0, -1., 0.0), vec3(0.0, 1., 0.0), 0.5);
 
     let f = fbm(p);
 
-    return - sphereDistance + f;
+    let step1 = min(d1, d4);
+    let step2 = d2;
+    let step3 = d3;
+
+    let elapsedSeconds = uniforms.elapsedTime * 0.001;
+    let numTransitions = 3.0;
+    let stepDuration = 2.0;
+    let cyclePos = (elapsedSeconds % (numTransitions * stepDuration)) / stepDuration;
+
+    let transitionIdx = floor(cyclePos);            // 0 or 1
+    let m = smoothstep(0.6, 1.0, fract(cyclePos));  // 0..1 within this transition
+
+    var start = 0.0;
+    var end = 0.0;
+    if (transitionIdx == 0.0) {
+        start = step1;
+        end   = step2;
+    } else if (transitionIdx == 1.0) {
+        start = step2;
+        end   = step3;
+    } else if (transitionIdx == 2.0) {
+        start = step3;
+        end   = step1;
+    }
+    var distance = mix(start, end, m);
+
+    return - distance + f;
 }
 
 fn rayMarch(rayOrigin: vec3f, rayDirection: vec3f, sunDirection: vec3f) -> vec4f {
@@ -97,17 +167,26 @@ fn rayMarch(rayOrigin: vec3f, rayDirection: vec3f, sunDirection: vec3f) -> vec4f
     return result;
 }
 
+fn applyCameraRotation(p: vec3f) -> vec3f {
+    let angle = uniforms.elapsedTime * 0.0005;
+    let p1 = rotateXZ(p, angle);
+    let p2 = rotateYZ(p1, 70.0);
+    return p2;
+}
+
 @fragment
 fn fs(in: VertexOut) -> @location(0) vec4f {
-    var sunPosition: vec3f = vec3(2.0 + 2.0 * (-1.0 * uniforms.elapsedTime * 0.001 * 0.2), 1.5, -0.5);
+    var sunPosition: vec3f = vec3(2.0, 1.5, 0.5);
+//    var sunPosition: vec3f = vec3(2.0 * sin(uniforms.elapsedTime * 0.001), 1.5, 0.5); // sun from right to left
     var sunDirection: vec3f = normalize(sunPosition);
 
     var uv = vec2f(in.uv) - vec2f(0.5);
 
-    var camera = vec3f(0.0, 0.0, 5.0);
-    let rayDir = vec3f(0.0, 0.0, -1.0) + vec3f(uv, 0.0);
+    var camera = vec3f(0.0, 0.0, -5.0);
+    camera = applyCameraRotation(camera);
+    let rayDir = normalize(-normalize(camera) + applyCameraRotation(vec3f(uv, 0.0)));
 
-    var offset = vec3(0.0, 0.0, textureSampleLevel(noiseTexture, texSampler, uv, 0.0).r);
+    var offset = applyCameraRotation(vec3(0.0, 0.0, textureSampleLevel(noiseTexture, texSampler, uv, 0.0).r));
     offset *= MARCH_SIZE * .5;
 
     let cloudColor = rayMarch(camera + offset, rayDir, sunDirection);
@@ -116,7 +195,7 @@ fn fs(in: VertexOut) -> @location(0) vec4f {
     skyColor -= 0.8 * vec3(0.9, 0.75, 0.9) * uv.y;
 
     let sun = clamp(dot(sunDirection, rayDir), 0.0, 1.0);
-    skyColor += vec3(0.5,0.25,0.15) * pow(sun, 2.0);
+    skyColor += vec3(0.5,0.25,0.15) * pow(sun, 1.0);
 
     let color = skyColor * (1.0 - cloudColor.a) + cloudColor.rgb;
     return vec4(color.rgb, 1.0);
