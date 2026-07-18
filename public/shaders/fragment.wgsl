@@ -1,3 +1,8 @@
+const MAX_STEPS: i32 = 100;
+const MAX_DISTANCE: f32 = 100.0f;
+const EPSILON: f32 = 0.01f;
+const MARCH_SIZE: f32 = 0.08f;
+
 struct Uniforms {
     view: mat4x4f,
     projection: mat4x4f,
@@ -11,44 +16,108 @@ struct Uniforms {
 
 struct VertexOut {
     @builtin(position) pos: vec4f,
-    @location(0) worldPos: vec3f,
+    @location(0) uv: vec2f,
 };
 
-fn sampleNoise3D(position: vec3f) -> f32 {
-    let xy = textureSampleLevel(noiseTexture, texSampler, position.xy + vec2(0.5f), 0.0f).r;
-    let yz = textureSampleLevel(noiseTexture, texSampler, position.yz + vec2(0.7f), 0.0f).r;
-    let xz = textureSampleLevel(noiseTexture, texSampler, position.xz + vec2(0.9f), 0.0f).r;
+fn noise(x: vec3f) -> f32 {
+    const offset = vec2(37.0, 239.0);
 
-    return (xy + yz + xz) / 3.0f;
+    let p = floor(x);
+    var f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+
+    let uv = (p.xy + offset * p.z) + f.xy;
+    let texSample = textureSampleLevel(noiseTexture, texSampler, uv / 256.0, 0.0);
+
+    return mix(texSample.g, texSample.r, f.z) * 2.0 - 1.0;
+}
+
+fn fbm(p: vec3f) -> f32 {
+    var q = p + uniforms.elapsedTime * 0.001 * 0.5 * vec3(1.0, -0.2, -1.0);
+
+    var f = 0.0f;
+    var scale = 0.5f;
+    var factor = 2.02f;
+
+    for (var i = 0; i < 6; i++) {
+        f += scale * noise(q);
+        q *= factor;
+        factor += 0.21;
+        scale *= 0.5;
+    }
+
+    return f;
+}
+
+fn sdSphere(a:vec3f, b: vec3f, radius: f32) -> f32 {
+    return length(b-a) - radius;
+};
+
+fn scene(p: vec3f) -> f32 {
+    let sphere = vec4f(0.0, 0.0, 0.0, 1.0);
+    let sphereDistance = sdSphere(p, sphere.xyz, sphere.w);
+
+    let f = fbm(p);
+
+    return - sphereDistance + f;
+}
+
+fn rayMarch(rayOrigin: vec3f, rayDirection: vec3f, sunDirection: vec3f) -> vec4f {
+    var currentPosition = rayOrigin;
+    var result = vec4(0.);
+    var marchedInside = false;
+
+    for (var i = 0; i < MAX_STEPS; i++) {
+        let density = scene(currentPosition);
+
+        if (density > 0) {
+            let diffuse = clamp((density - scene(currentPosition + sunDirection * 0.3)) / 0.3, 0.0, 1.0);
+            let lin = vec3(0.6, 0.6, 0.75) * 1.1 + vec3(1.0, 0.6, 0.3) * 0.8 * diffuse;
+
+            var color = vec4(0.0);
+            const white = vec3(0.0, 0.0, 0.0);
+            const black = vec3(1.0, 1.0, 1.0);
+
+
+            color += vec4(vec3(1.0 - density), density); // both lines are equivalent
+//            color += vec4(mix(black, white, density), density);
+
+            // tint cloud
+            color = vec4(color.rgb * lin, color.a);
+
+            // premultiplied alpha
+            color = vec4(color.rgb * color.a, color.a);
+
+            result += color * (1.0 - result.a);
+        }
+
+        currentPosition = currentPosition + MARCH_SIZE * normalize(rayDirection);
+    }
+
+    return result;
 }
 
 @fragment
 fn fs(in: VertexOut) -> @location(0) vec4f {
-    const NUM_STEPS = 100.0f;
-    const ABSORPTION = 4.0f;
+    var sunPosition: vec3f = vec3(2.0 + 2.0 * (-1.0 * uniforms.elapsedTime * 0.001 * 0.2), 1.5, -0.5);
+    var sunDirection: vec3f = normalize(sunPosition);
 
-    var stepSize = 1.41f / NUM_STEPS;
+    var uv = vec2f(in.uv) - vec2f(0.5);
 
-    let camera = uniforms.cameraPosition.xyz;
+    var camera = vec3f(0.0, 0.0, 5.0);
+    let rayDir = vec3f(0.0, 0.0, -1.0) + vec3f(uv, 0.0);
 
-    // ray marching the cloud
-    let rayDirection = normalize(in.worldPos - camera);
+    var offset = vec3(0.0, 0.0, textureSampleLevel(noiseTexture, texSampler, uv, 0.0).r);
+    offset *= MARCH_SIZE * .5;
 
-    var currentPosition = in.worldPos;
-    var transmittance = 1.0f;
+    let cloudColor = rayMarch(camera + offset, rayDir, sunDirection);
 
-    for (var i = 0; i < i32(NUM_STEPS); i++){
-        currentPosition = currentPosition + rayDirection * stepSize;
-        if (
-            currentPosition.x > -0.5f && currentPosition.x < 0.5f &&
-            currentPosition.y > -0.5f && currentPosition.y < 0.5f &&
-            currentPosition.z > -0.5f && currentPosition.z < 0.5f
-        ) {
-            let density = sampleNoise3D(currentPosition);
-            transmittance *= exp(-density * stepSize * ABSORPTION);
-        }
-    }
+    var skyColor = vec3(0.7, 0.7, 0.9);
+    skyColor -= 0.8 * vec3(0.9, 0.75, 0.9) * uv.y;
 
-    let alpha = 1.0f - transmittance;
-    return vec4(1.0, 1.0, 1.0, alpha);
+    let sun = clamp(dot(sunDirection, rayDir), 0.0, 1.0);
+    skyColor += vec3(0.5,0.25,0.15) * pow(sun, 2.0);
+
+    let color = skyColor * (1.0 - cloudColor.a) + cloudColor.rgb;
+    return vec4(color.rgb, 1.0);
 }

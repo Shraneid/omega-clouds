@@ -155,7 +155,25 @@ const loadWGSL = async (path: string) => {
 
 const loadShaderModule = async (path: string): Promise<GPUShaderModule> => {
     const code = await loadWGSL(path);
-    return device.createShaderModule({ code });
+    const module = device.createShaderModule({ code, label: path });
+
+    const info = await module.getCompilationInfo();
+    const errors = info.messages.filter((m) => m.type === "error");
+    if (errors.length > 0) {
+        for (const m of errors) {
+            console.error(
+                `%c${path}:${m.lineNum}:${m.linePos} ${m.message}`,
+                "color:#ff5555",
+            );
+        }
+        throw new Error(
+            `Shader compilation failed in ${path}:\n` +
+                errors
+                    .map((m) => `  ${m.lineNum}:${m.linePos} ${m.message}`)
+                    .join("\n"),
+        );
+    }
+    return module;
 };
 
 const vertexShader = await loadShaderModule("shaders/vertex.wgsl");
@@ -249,7 +267,7 @@ const indexBuffer = device.createBuffer({
 
 // LOAD TEXTURES
 const { sampler: noiseSampler, texture: noiseTexture } =
-    await getSamplerAndTexture("textures/uniformclouds.jpg", "noiseTexture");
+    await getSamplerAndTexture("textures/noise.png", "noiseTexture");
 // END LOAD TEXTURES
 
 // BIND GROUP LAYOUTS
@@ -286,8 +304,7 @@ const renderPipeline = device.createRenderPipeline({
     layout: renderPipelineLayout,
     primitive: {
         topology: "triangle-list",
-        cullMode: "back",
-        frontFace: "cw",
+        cullMode: "none",
     },
     vertex: {
         module: vertexShader,
@@ -351,7 +368,7 @@ const renderPassDescriptor = {
     label: "Render Pass Description",
     colorAttachments: [
         {
-            clearValue: [114 / 255, 214 / 255, 255 / 255, 1],
+            clearValue: [0 / 255, 0 / 255, 0 / 255, 1],
             loadOp: "clear",
             storeOp: "store",
             view: context.getCurrentTexture().createView(),
@@ -419,7 +436,7 @@ const render = (deltaTime: number, elapsedTime: number) => {
     renderPass.setVertexBuffer(0, vertexBuffer);
     renderPass.setIndexBuffer(indexBuffer, "uint16");
     renderPass.setBindGroup(0, renderBindGroup);
-    renderPass.drawIndexed(36);
+    renderPass.draw(3);
     renderPass.end();
 
     device.queue.submit([encoder.finish()]);
