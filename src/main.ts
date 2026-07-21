@@ -116,7 +116,7 @@ const loadTextureToBitmap = async (path: string) => {
     return await createImageBitmap(textureBlob);
 };
 
-const getSamplerAndTexture = async (path: string, label: string) => {
+const getTexture = async (path: string, label: string) => {
     const bitmap = await loadTextureToBitmap(path);
 
     const texture = device.createTexture({
@@ -134,14 +134,7 @@ const getSamplerAndTexture = async (path: string, label: string) => {
         bitmap.height,
     ]);
 
-    const sampler = device.createSampler({
-        minFilter: "linear",
-        magFilter: "linear",
-        addressModeU: "repeat",
-        addressModeV: "repeat",
-    });
-
-    return { sampler, texture };
+    return texture;
 };
 
 // LOAD SHADERS
@@ -266,8 +259,22 @@ const indexBuffer = device.createBuffer({
 // END BUFFERS
 
 // LOAD TEXTURES
-const { sampler: noiseSampler, texture: noiseTexture } =
-    await getSamplerAndTexture("textures/noise.png", "noiseTexture");
+const noiseSampler = device.createSampler({
+    minFilter: "linear",
+    magFilter: "linear",
+    addressModeU: "repeat",
+    addressModeV: "repeat",
+});
+
+const mainNoiseTexture = await getTexture(
+    "textures/noise.png",
+    "mainNoiseTexture",
+);
+
+const blueNoiseTexture = await getTexture(
+    "textures/blueNoise.png",
+    "blueNoiseTexture",
+);
 // END LOAD TEXTURES
 
 // BIND GROUP LAYOUTS
@@ -286,6 +293,11 @@ const renderBindGroupLayout = device.createBindGroupLayout({
         },
         {
             binding: 2,
+            visibility: GPUShaderStage.FRAGMENT,
+            texture: {},
+        },
+        {
+            binding: 3,
             visibility: GPUShaderStage.FRAGMENT,
             texture: {},
         },
@@ -358,7 +370,11 @@ const renderBindGroup = device.createBindGroup({
         },
         {
             binding: 2,
-            resource: noiseTexture.createView(),
+            resource: mainNoiseTexture.createView(),
+        },
+        {
+            binding: 3,
+            resource: blueNoiseTexture.createView(),
         },
     ],
 });

@@ -1,7 +1,7 @@
-const MAX_STEPS: i32 = 100;
+const MAX_STEPS: i32 = 40;
 const MAX_DISTANCE: f32 = 100.0f;
 const EPSILON: f32 = 0.01f;
-const MARCH_SIZE: f32 = 0.08f;
+const MARCH_SIZE: f32 = 0.16f;
 
 struct Uniforms {
     view: mat4x4f,
@@ -13,6 +13,7 @@ struct Uniforms {
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var texSampler: sampler;
 @group(0) @binding(2) var noiseTexture: texture_2d<f32>;
+@group(0) @binding(3) var blueNoiseTexture: texture_2d<f32>;
 
 struct VertexOut {
     @builtin(position) pos: vec4f,
@@ -45,13 +46,13 @@ fn noise(x: vec3f) -> f32 {
     f = f * f * (3.0 - 2.0 * f);
 
     let uv = (p.xy + offset * p.z) + f.xy;
-    let texSample = textureSampleLevel(noiseTexture, texSampler, uv / 256.0, 0.0);
+    let texSample = textureSampleLevel(noiseTexture, texSampler, (uv + 0.5) / 256.0, 0.0);
 
     return mix(texSample.g, texSample.r, f.z) * 2.0 - 1.0;
 }
 
 fn fbm(p: vec3f) -> f32 {
-    var q = p + uniforms.elapsedTime * 0.001 * 0.5 * vec3(1.0, -0.2, -1.0);
+    var q = p + uniforms.elapsedTime * 0.0003 * vec3(1.0, -0.2, -1.0);
 
     var f = 0.0f;
     var scale = 0.5f;
@@ -93,43 +94,51 @@ fn sdCapsule(p: vec3f, a: vec3f, b: vec3f, r: f32) -> f32 {
     return length( pa - ba*h ) - r;
 }
 
+// animated transitions
+//fn scene(p: vec3f) -> f32 {
+//    let d1 = sdTorus(p, vec2(1.3, 0.8));
+//    let d2 = sdOctahedron(p, 2.0);
+//    let d3 = sdVerticalCapsule(p, 2.0, 0.5);
+//    let d4 = sdCapsule(p, vec3(0.0, -1., 0.0), vec3(0.0, 1., 0.0), 0.5);
+//
+//    let f = fbm(p);
+//
+//    let step1 = min(d1, d4);
+//    let step2 = d2;
+//    let step3 = d3;
+//
+//    let elapsedSeconds = uniforms.elapsedTime * 0.001;
+//    let numTransitions = 3.0;
+//    let stepDuration = 2.0;
+//    let cyclePos = (elapsedSeconds % (numTransitions * stepDuration)) / stepDuration;
+//
+//    let transitionIdx = floor(cyclePos);            // 0 or 1
+//    let m = smoothstep(0.6, 1.0, fract(cyclePos));  // 0..1 within this transition
+//
+//    var start = 0.0;
+//    var end = 0.0;
+//    if (transitionIdx == 0.0) {
+//        start = step1;
+//        end   = step2;
+//    } else if (transitionIdx == 1.0) {
+//        start = step2;
+//        end   = step3;
+//    } else if (transitionIdx == 2.0) {
+//        start = step3;
+//        end   = step1;
+//    }
+//    var distance = mix(start, end, m);
+//
+//    return - distance + f;
+//}
+
 fn scene(p: vec3f) -> f32 {
     let sphere = vec4f(0.0, 0.0, 0.0, 1.0);
-//    let sphereDistance = sdSphere(p, sphere.xyz, sphere.w);
-    let d1 = sdTorus(p, vec2(1.3, 0.8));
-    let d2 = sdOctahedron(p, 2.0);
-    let d3 = sdVerticalCapsule(p, 2.0, 0.5);
-    let d4 = sdCapsule(p, vec3(0.0, -1., 0.0), vec3(0.0, 1., 0.0), 0.5);
+    let sphereDistance = sdSphere(p, sphere.xyz, sphere.w);
 
     let f = fbm(p);
 
-    let step1 = min(d1, d4);
-    let step2 = d2;
-    let step3 = d3;
-
-    let elapsedSeconds = uniforms.elapsedTime * 0.001;
-    let numTransitions = 3.0;
-    let stepDuration = 2.0;
-    let cyclePos = (elapsedSeconds % (numTransitions * stepDuration)) / stepDuration;
-
-    let transitionIdx = floor(cyclePos);            // 0 or 1
-    let m = smoothstep(0.6, 1.0, fract(cyclePos));  // 0..1 within this transition
-
-    var start = 0.0;
-    var end = 0.0;
-    if (transitionIdx == 0.0) {
-        start = step1;
-        end   = step2;
-    } else if (transitionIdx == 1.0) {
-        start = step2;
-        end   = step3;
-    } else if (transitionIdx == 2.0) {
-        start = step3;
-        end   = step1;
-    }
-    var distance = mix(start, end, m);
-
-    return - distance + f;
+    return - sphereDistance + f;
 }
 
 fn rayMarch(rayOrigin: vec3f, rayDirection: vec3f, sunDirection: vec3f) -> vec4f {
@@ -168,7 +177,7 @@ fn rayMarch(rayOrigin: vec3f, rayDirection: vec3f, sunDirection: vec3f) -> vec4f
 }
 
 fn applyCameraRotation(p: vec3f) -> vec3f {
-    let angle = uniforms.elapsedTime * 0.0005;
+    let angle = uniforms.elapsedTime * 0.0; //* 0.0005;
     let p1 = rotateXZ(p, angle);
     let p2 = rotateYZ(p1, 70.0);
     return p2;
@@ -180,19 +189,20 @@ fn fs(in: VertexOut) -> @location(0) vec4f {
 //    var sunPosition: vec3f = vec3(2.0 * sin(uniforms.elapsedTime * 0.001), 1.5, 0.5); // sun from right to left
     var sunDirection: vec3f = normalize(sunPosition);
 
-    var uv = vec2f(in.uv) - vec2f(0.5);
+    var uv = vec2f(in.uv);
+    var centeredUV = uv - vec2f(0.5);
 
     var camera = vec3f(0.0, 0.0, -5.0);
     camera = applyCameraRotation(camera);
-    let rayDir = normalize(-normalize(camera) + applyCameraRotation(vec3f(uv, 0.0)));
+    let rayDir = normalize(-normalize(camera) + applyCameraRotation(vec3f(centeredUV, 0.0)));
 
-    var offset = applyCameraRotation(vec3(0.0, 0.0, textureSampleLevel(noiseTexture, texSampler, uv, 0.0).r));
-    offset *= MARCH_SIZE * .5;
+    var offset = fract(textureSampleLevel(blueNoiseTexture, texSampler, in.pos.xy / 1024.0, 0.0).r + uniforms.elapsedTime / 1000.0 * 0.5);
+    offset *= MARCH_SIZE;
 
-    let cloudColor = rayMarch(camera + offset, rayDir, sunDirection);
+    let cloudColor = rayMarch(camera + rayDir * offset, rayDir, sunDirection);
 
     var skyColor = vec3(0.7, 0.7, 0.9);
-    skyColor -= 0.8 * vec3(0.9, 0.75, 0.9) * uv.y;
+    skyColor -= 0.8 * vec3(0.9, 0.75, 0.9) * centeredUV.y;
 
     let sun = clamp(dot(sunDirection, rayDir), 0.0, 1.0);
     skyColor += vec3(0.5,0.25,0.15) * pow(sun, 1.0);
