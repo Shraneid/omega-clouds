@@ -171,95 +171,19 @@ const loadShaderModule = async (path: string): Promise<GPUShaderModule> => {
 
 const vertexShader = await loadShaderModule("shaders/vertex.wgsl");
 const fragmentShader = await loadShaderModule("shaders/fragment.wgsl");
+const postProcessShader = await loadShaderModule("shaders/postProcess.wgsl");
 // END LOAD SHADERS
 
 // BUFFERS
-const vertices = new Float32Array([
-    -0.5,
-    -0.5,
-    -0.5, // 0
-    0.5,
-    -0.5,
-    -0.5, // 1
-    0.5,
-    0.5,
-    -0.5, // 2
-    -0.5,
-    0.5,
-    -0.5, // 3
-    -0.5,
-    -0.5,
-    0.5, // 4
-    0.5,
-    -0.5,
-    0.5, // 5
-    0.5,
-    0.5,
-    0.5, // 6
-    -0.5,
-    0.5,
-    0.5, // 7
-]);
-const indices = new Uint16Array([
-    0,
-    1,
-    2,
-    0,
-    2,
-    3, // -Z
-    5,
-    4,
-    7,
-    5,
-    7,
-    6, // +Z
-    4,
-    0,
-    3,
-    4,
-    3,
-    7, // -X
-    1,
-    5,
-    6,
-    1,
-    6,
-    2, // +X
-    3,
-    2,
-    6,
-    3,
-    6,
-    7, // +Y
-    4,
-    5,
-    1,
-    4,
-    1,
-    0, // -Y
-]);
-
 const uniformBuffer = device.createBuffer({
     label: "Uniform Buffer",
     size: 160, // 152 + 8 padding, rounded at 16 bytes
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
 });
-
-const vertexBuffer = device.createBuffer({
-    label: "VertexBuffer",
-    size: vertices.byteLength,
-    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
-});
-
-const indexBuffer = device.createBuffer({
-    label: "IndexBuffer",
-    size: indices.byteLength,
-    usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,
-});
 // END BUFFERS
 
 // LOAD TEXTURES
-const noiseSampler = device.createSampler({
+const linearSampler = device.createSampler({
     minFilter: "linear",
     magFilter: "linear",
     addressModeU: "repeat",
@@ -276,6 +200,21 @@ const blueNoiseTexture = await getTexture(
     "blueNoiseTexture",
 );
 // END LOAD TEXTURES
+
+// RENDER TARGET
+const RENDER_SCALE = 1.0;
+const renderTargetSize = {
+    width: canvas.width * RENDER_SCALE,
+    height: canvas.height * RENDER_SCALE,
+};
+
+const sceneTexture = device.createTexture({
+    label: "",
+    size: [renderTargetSize.width, renderTargetSize.height],
+    format: presentationFormat,
+    usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT,
+});
+// END RENDER TARGET
 
 // BIND GROUP LAYOUTS
 const renderBindGroupLayout = device.createBindGroupLayout({
@@ -303,6 +242,27 @@ const renderBindGroupLayout = device.createBindGroupLayout({
         },
     ],
 });
+
+const postProcessBindGroupLayout = device.createBindGroupLayout({
+    label: "Post Process Bind Group Layout",
+    entries: [
+        {
+            binding: 0,
+            visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+            buffer: { type: "uniform" },
+        },
+        {
+            binding: 1,
+            visibility: GPUShaderStage.FRAGMENT,
+            sampler: {},
+        },
+        {
+            binding: 2,
+            visibility: GPUShaderStage.FRAGMENT,
+            texture: {},
+        },
+    ],
+});
 // END BIND GROUP LAYOUTS
 
 // PIPELINES SETUP
@@ -320,18 +280,6 @@ const renderPipeline = device.createRenderPipeline({
     },
     vertex: {
         module: vertexShader,
-        buffers: [
-            {
-                arrayStride: 12, // 3 floats * 4 bytes
-                attributes: [
-                    {
-                        shaderLocation: 0,
-                        offset: 0,
-                        format: "float32x3",
-                    },
-                ],
-            },
-        ],
     },
     fragment: {
         module: fragmentShader,
@@ -355,6 +303,32 @@ const renderPipeline = device.createRenderPipeline({
     },
 });
 
+const postProcessPipelineLayout = device.createPipelineLayout({
+    label: "Post Process Pipeline Layout",
+    bindGroupLayouts: [postProcessBindGroupLayout],
+});
+
+const postProcessPipeline = device.createRenderPipeline({
+    label: "Post Process Pipeline",
+    layout: postProcessPipelineLayout,
+    primitive: {
+        topology: "triangle-list",
+        cullMode: "none",
+    },
+    vertex: {
+        module: vertexShader,
+    },
+    fragment: {
+        module: postProcessShader,
+        targets: [
+            {
+                format: presentationFormat,
+                blend: undefined,
+            },
+        ],
+    },
+});
+
 // BIND GROUPS
 const renderBindGroup = device.createBindGroup({
     label: "Render Bind Group",
@@ -366,7 +340,7 @@ const renderBindGroup = device.createBindGroup({
         },
         {
             binding: 1,
-            resource: noiseSampler,
+            resource: linearSampler,
         },
         {
             binding: 2,
@@ -379,12 +353,43 @@ const renderBindGroup = device.createBindGroup({
     ],
 });
 
-// Render Pass Descriptor
+const postProcessBindGroup = device.createBindGroup({
+    label: "Post Processing Bind Group",
+    layout: postProcessBindGroupLayout,
+    entries: [
+        {
+            binding: 0,
+            resource: { buffer: uniformBuffer },
+        },
+        {
+            binding: 1,
+            resource: linearSampler,
+        },
+        {
+            binding: 2,
+            resource: sceneTexture.createView(),
+        },
+    ],
+});
+
+// Render Pass Descriptors
 const renderPassDescriptor = {
     label: "Render Pass Description",
     colorAttachments: [
         {
-            clearValue: [0 / 255, 0 / 255, 0 / 255, 1],
+            view: sceneTexture.createView(),
+            clearValue: [0, 0, 0, 1],
+            loadOp: "clear",
+            storeOp: "store",
+        },
+    ],
+};
+
+const postProcessPassDescriptor = {
+    label: "Post Process Pass Description",
+    colorAttachments: [
+        {
+            clearValue: [0, 0, 0, 1],
             loadOp: "clear",
             storeOp: "store",
             view: context.getCurrentTexture().createView(),
@@ -394,12 +399,10 @@ const renderPassDescriptor = {
 // END PIPELINES SETUP
 
 // SENDING BUFFERS TO GPU
-device.queue.writeBuffer(vertexBuffer, 0, vertices);
-device.queue.writeBuffer(indexBuffer, 0, indices);
 
 // RENDER
 const render = (deltaTime: number, elapsedTime: number) => {
-    renderPassDescriptor.colorAttachments[0].view = context
+    postProcessPassDescriptor.colorAttachments[0].view = context
         .getCurrentTexture()
         .createView();
 
@@ -449,11 +452,16 @@ const render = (deltaTime: number, elapsedTime: number) => {
     // @ts-ignore
     const renderPass = encoder.beginRenderPass(renderPassDescriptor);
     renderPass.setPipeline(renderPipeline);
-    renderPass.setVertexBuffer(0, vertexBuffer);
-    renderPass.setIndexBuffer(indexBuffer, "uint16");
     renderPass.setBindGroup(0, renderBindGroup);
     renderPass.draw(3);
     renderPass.end();
+
+    // @ts-ignore
+    const postProcessPass = encoder.beginRenderPass(postProcessPassDescriptor);
+    postProcessPass.setPipeline(postProcessPipeline);
+    postProcessPass.setBindGroup(0, postProcessBindGroup);
+    postProcessPass.draw(3);
+    postProcessPass.end();
 
     device.queue.submit([encoder.finish()]);
 };
