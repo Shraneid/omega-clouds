@@ -196,7 +196,7 @@ fn fs(in: VertexOut) -> @location(0) vec4f {
     camera = applyCameraRotation(camera);
     let rayDir = normalize(-normalize(camera) + applyCameraRotation(vec3f(centeredUV, 0.0)));
 
-    var offset = fract(textureSampleLevel(blueNoiseTexture, texSampler, in.pos.xy / 1024.0, 0.0).r + uniforms.elapsedTime / 1000.0 * 0.5);
+    var offset = fract(textureSampleLevel(blueNoiseTexture, texSampler, in.pos.xy / 1024.0, 0.0).r);
     offset *= MARCH_SIZE;
 
     let cloudColor = rayMarch(camera + rayDir * offset, rayDir, sunDirection);
