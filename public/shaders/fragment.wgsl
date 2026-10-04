@@ -2,6 +2,8 @@ const MAX_STEPS: i32 = 40;
 const MAX_DISTANCE: f32 = 100.0f;
 const EPSILON: f32 = 0.01f;
 const MARCH_SIZE: f32 = 0.16f;
+const ANIMATED: f32 = 1.0f; // TRUE
+//const ANIMATED: f32 = 0.0f; // FALSE
 
 struct Uniforms {
     view: mat4x4f,
@@ -53,7 +55,7 @@ fn noise(x: vec3f) -> f32 {
 }
 
 fn fbm(p: vec3f) -> f32 {
-    var q = p + uniforms.elapsedTime * 0.0003 * vec3(1.0, -0.2, -1.0);
+    var q = p + uniforms.elapsedTime * 0.0003 * vec3(1.0, -0.2, -1.0) * ANIMATED;
 
     var f = 0.0f;
     var scale = 0.5f;
@@ -199,7 +201,6 @@ fn fs(in: VertexOut) -> @location(0) vec4f {
 
     var offset = fract(textureSampleLevel(blueNoiseTexture, texSampler, in.pos.xy / 1024.0, 0.0).r);
     offset = fract(offset + f32(u32(uniforms.frameCount) % 32u) / sqrt(0.5) * MARCH_SIZE);
-//    offset *= MARCH_SIZE;
 
     let cloudColor = rayMarch(camera + rayDir * offset, rayDir, sunDirection);
 
