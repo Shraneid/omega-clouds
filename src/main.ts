@@ -211,7 +211,7 @@ const blueNoiseTexture = await getTexture(
 const RENDER_SCALE = parseFloat(params.get("scale") ?? "0.5");
 
 const scaleSelect = document.getElementById("renderScale") as HTMLSelectElement;
-scaleSelect.value = RENDER_SCALE.toFixed(1);
+scaleSelect.value = String(RENDER_SCALE);
 scaleSelect.addEventListener("change", () => {
     params.set("scale", scaleSelect.value);
     window.location.search = params.toString();
