@@ -189,6 +189,12 @@ const linearSampler = device.createSampler({
     addressModeU: "repeat",
     addressModeV: "repeat",
 });
+const postProcessSampler = device.createSampler({
+    minFilter: "linear",
+    magFilter: "linear",
+    addressModeU: "repeat",
+    addressModeV: "repeat",
+});
 
 const mainNoiseTexture = await getTexture(
     "textures/noise.png",
@@ -371,7 +377,7 @@ const postProcessBindGroup = device.createBindGroup({
         },
         {
             binding: 1,
-            resource: linearSampler,
+            resource: postProcessSampler,
         },
         {
             binding: 2,
