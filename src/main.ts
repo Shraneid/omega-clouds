@@ -202,7 +202,15 @@ const blueNoiseTexture = await getTexture(
 // END LOAD TEXTURES
 
 // RENDER TARGET
-const RENDER_SCALE = 1.0;
+const RENDER_SCALE = parseFloat(params.get("scale") ?? "0.5");
+
+const scaleSelect = document.getElementById("renderScale") as HTMLSelectElement;
+scaleSelect.value = RENDER_SCALE.toFixed(1);
+scaleSelect.addEventListener("change", () => {
+    params.set("scale", scaleSelect.value);
+    window.location.search = params.toString();
+});
+
 const renderTargetSize = {
     width: canvas.width * RENDER_SCALE,
     height: canvas.height * RENDER_SCALE,
