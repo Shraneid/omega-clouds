@@ -192,8 +192,8 @@ const linearSampler = device.createSampler({
 const postProcessSampler = device.createSampler({
     minFilter: "linear",
     magFilter: "linear",
-    addressModeU: "repeat",
-    addressModeV: "repeat",
+    addressModeU: "clamp-to-edge",
+    addressModeV: "clamp-to-edge",
 });
 
 const mainNoiseTexture = await getTexture(
