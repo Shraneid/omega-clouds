@@ -209,4 +209,9 @@ fn fs(in: VertexOut) -> @location(0) vec4f {
 
     let color = skyColor * (1.0 - cloudColor.a) + cloudColor.rgb;
     return vec4(color.rgb, 1.0);
+
+//    const black = vec4(0.0, 0.0, 0.0, 1.0);
+//    const white = vec4(1.0, 1.0, 1.0, 1.0);
+
+//    return select(black, white, (fract(uv.x * 10.0) > 0.5 && fract(uv.y * 10.0) > 0.5) || (fract(uv.x * 10.0) < 0.5 && fract(uv.y * 10.0) < 0.5));
 }
