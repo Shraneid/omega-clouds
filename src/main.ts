@@ -415,7 +415,7 @@ const postProcessPassDescriptor = {
 // SENDING BUFFERS TO GPU
 
 // RENDER
-const render = (deltaTime: number, elapsedTime: number) => {
+const render = (deltaTime: number, elapsedTime: number, frameCount: number) => {
     postProcessPassDescriptor.colorAttachments[0].view = context
         .getCurrentTexture()
         .createView();
@@ -461,6 +461,11 @@ const render = (deltaTime: number, elapsedTime: number) => {
         144,
         new Float32Array([deltaTime / 1000, elapsedTime]),
     );
+    device.queue.writeBuffer(
+        uniformBuffer,
+        152,
+        new Float32Array([frameCount]),
+    );
 
     // RENDER PASS
     // @ts-ignore
@@ -480,6 +485,8 @@ const render = (deltaTime: number, elapsedTime: number) => {
     device.queue.submit([encoder.finish()]);
 };
 
+let frameCount = 0;
+
 const renderLoop = (timestamp: number) => {
     if (startTime === undefined) {
         startTime = timestamp;
@@ -488,10 +495,11 @@ const renderLoop = (timestamp: number) => {
     const elapsedTime = timestamp - startTime;
     const deltaTime = timestamp - lastFrameTime;
 
-    render(deltaTime, elapsedTime);
+    render(deltaTime, elapsedTime, frameCount);
 
     lastFrameTime = timestamp;
     console.log("looping");
+    frameCount += 1;
     requestAnimationFrame(renderLoop);
 };
 

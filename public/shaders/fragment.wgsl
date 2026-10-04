@@ -8,7 +8,8 @@ struct Uniforms {
     projection: mat4x4f,
     cameraPosition: vec4f,
     deltaTime: f32,
-    elapsedTime: f32
+    elapsedTime: f32,
+    frameCount: f32,
 }
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(0) @binding(1) var texSampler: sampler;
@@ -197,7 +198,8 @@ fn fs(in: VertexOut) -> @location(0) vec4f {
     let rayDir = normalize(-normalize(camera) + applyCameraRotation(vec3f(centeredUV, 0.0)));
 
     var offset = fract(textureSampleLevel(blueNoiseTexture, texSampler, in.pos.xy / 1024.0, 0.0).r);
-    offset *= MARCH_SIZE;
+    offset = fract(offset + f32(u32(uniforms.frameCount) % 32u) / sqrt(0.5) * MARCH_SIZE);
+//    offset *= MARCH_SIZE;
 
     let cloudColor = rayMarch(camera + rayDir * offset, rayDir, sunDirection);
 
